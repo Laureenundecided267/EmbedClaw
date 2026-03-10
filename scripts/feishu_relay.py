@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
 
 import argparse
+import asyncio
 import json
 import logging
 import sys
 
-try:
-    import websocket
-except ImportError:
-    print("Install: pip install websocket-client", file=sys.stderr)
-    sys.exit(1)
+import websocket
 
 # ---------------------------------------------------------------------------
 # Forward message to device WebSocket
@@ -37,43 +34,79 @@ def send_to_device(ws_url: str, chat_id: str, content: str) -> bool:
 # Feishu event handling (long connection via lark-oapi)
 # ---------------------------------------------------------------------------
 
-def run_with_lark_oapi(app_id: str, app_secret: str, device_ws_url: str) -> None:
+def _patch_asyncio_for_websockets_9() -> bool:
+    """Allow websockets 9.x to run on Python 3.10+ by dropping deprecated loop=."""
+    if sys.version_info < (3, 10):
+        return False
+
     try:
-        from lark_oapi import Client, EventDispatcher
-        from lark_oapi.api.event import v1 as event_v1
+        import websockets
     except ImportError:
-        logging.error("Install: pip install lark-oapi")
-        sys.exit(1)
+        return False
+
+    version = getattr(websockets, "__version__", "")
+    if not version:
+        return False
+
+    try:
+        major = int(version.split(".", 1)[0])
+    except ValueError:
+        return False
+
+    if major >= 10 or getattr(asyncio, "_embedclaw_loop_kw_patched", False):
+        return False
+
+    def wrap_callable(func):
+        def wrapper(*args, **kwargs):
+            kwargs.pop("loop", None)
+            return func(*args, **kwargs)
+        return wrapper
+
+    for name in ("sleep", "wait", "wait_for"):
+        setattr(asyncio, name, wrap_callable(getattr(asyncio, name)))
+
+    for name in ("Lock", "Event", "Condition", "Semaphore"):
+        setattr(asyncio, name, wrap_callable(getattr(asyncio, name)))
+
+    asyncio._embedclaw_loop_kw_patched = True
+    return True
+
+def run_with_lark_oapi(app_id: str, app_secret: str, device_ws_url: str) -> None:
+    patched = _patch_asyncio_for_websockets_9()
+
+    from lark_oapi import EventDispatcherHandler
+    from lark_oapi.ws import Client as WSClient
 
     # Build reply target: p2p -> open_id:xxx, group -> chat_id:xxx
-    def build_chat_id(event: dict) -> str:
-        event_data = event.get("event", {})
-        sender = event_data.get("sender", {})
-        sender_id = sender.get("sender_id", {})
-        open_id = sender_id.get("open_id") or ""
-        message = event_data.get("message", {})
-        chat_type = message.get("chat_type") or "p2p"
-        chat_id = message.get("chat_id") or ""
+    def build_chat_id(event_ctx) -> str:
+        event_data = getattr(event_ctx, "event", None)
+        sender = getattr(event_data, "sender", None)
+        sender_id = getattr(sender, "sender_id", None)
+        open_id = getattr(sender_id, "open_id", "") or ""
+        message = getattr(event_data, "message", None)
+        chat_type = getattr(message, "chat_type", None) or "p2p"
+        chat_id = getattr(message, "chat_id", None) or ""
         if chat_type == "p2p" and open_id:
             return f"open_id:{open_id}"
         if chat_id:
             return f"chat_id:{chat_id}"
         return f"open_id:{open_id}" if open_id else ""
 
-    def extract_text(event: dict) -> str:
-        event_data = event.get("event", {})
-        message = event_data.get("message", {})
-        content_str = message.get("content") or "{}"
+    def extract_text(event_ctx) -> str:
+        event_data = getattr(event_ctx, "event", None)
+        message = getattr(event_data, "message", None)
+        if message is None:
+            return ""
+        if getattr(message, "message_type", None) not in (None, "text"):
+            return ""
+        content_str = getattr(message, "content", None) or "{}"
         try:
             content = json.loads(content_str)
             return content.get("text", content_str)
-        except Exception:
+        except json.JSONDecodeError:
             return content_str
 
-    def handler(data: dict) -> None:
-        event_type = (data.get("header") or {}).get("event_type")
-        if event_type != "im.message.receive_v1":
-            return
+    def handler(data) -> None:
         chat_id = build_chat_id(data)
         text = extract_text(data)
         if not chat_id or not text:
@@ -81,35 +114,15 @@ def run_with_lark_oapi(app_id: str, app_secret: str, device_ws_url: str) -> None
         logging.info("Feishu message -> device: chat_id=%s len=%d", chat_id, len(text))
         send_to_device(device_ws_url, chat_id, text)
 
-    # Client with long connection (outbound WebSocket to Feishu)
-    # See: https://open.feishu.cn/document/server-docs/event-subscription-guide/event-subscription-configure-/subscribe-to-events-via-websocket
-    client = Client.builder() \
-        .app_id(app_id) \
-        .app_secret(app_secret) \
-        .build()
-
-    # EventDispatcher: register handler for im.message.receive_v1
-    dispatcher = EventDispatcher()
-    dispatcher.register("im.message.receive_v1", handler)
+    dispatcher = EventDispatcherHandler.builder("", "").register_p2_im_message_receive_v1(handler).build()
 
     logging.info("Starting Feishu long-connection relay -> %s", device_ws_url)
-    logging.info("In Feishu console use '使用长连接接收事件', subscribe 接收消息 v2.0")
+    logging.info("In Feishu console use '使用长连接接收事件' and subscribe 'im.message.receive_v1'")
+    if patched:
+        logging.info("Applied asyncio compatibility patch for websockets<10 on Python 3.10+")
 
-    # Start outbound WebSocket (SDK connects to Feishu; no public URL needed).
-    # API may vary by lark-oapi version; see https://open.feishu.cn/document/server-docs/event-subscription-guide/event-subscription-configure-/subscribe-to-events-via-websocket
-    outbound = getattr(client.event, "outbound", None) or getattr(client.event, "dispatcher", None)
-    if outbound is not None and hasattr(outbound, "start"):
-        outbound.start(dispatcher)
-    elif hasattr(client, "event") and hasattr(client.event, "start_with_outbound"):
-        client.event.start_with_outbound(dispatcher)
-    else:
-        logging.error(
-            "lark-oapi outbound/long-connection API not found. "
-            "Use Feishu console: 事件订阅 -> 使用长连接接收事件; subscribe 接收消息 v2.0. "
-            "Then run your own script that on im.message.receive_v1 sends to device WS: "
-            '{"type":"message","content":"...","chat_id":"open_id:ou_xxx","channel":"feishu"}'
-        )
-        sys.exit(1)
+    client = WSClient(app_id, app_secret, event_handler=dispatcher)
+    client.start()
 
 
 # ---------------------------------------------------------------------------
