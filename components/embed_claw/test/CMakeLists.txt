@@ -1,0 +1,16 @@
+idf_component_register(
+    SRC_DIRS
+        "."
+        "channel"
+        "core"
+        "llm"
+        "support"
+        "tools"
+    PRIV_INCLUDE_DIRS
+        "."
+        "support"
+    PRIV_REQUIRES
+        unity
+        test_utils
+        embed_claw
+)

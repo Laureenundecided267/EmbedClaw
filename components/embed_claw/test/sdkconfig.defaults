@@ -1,0 +1,19 @@
+#
+# Keep the unit-test app aligned with the main project flash/PSRAM layout.
+# The test harness still layers extra defaults on top, but these base options
+# make the test config self-describing and avoid missing-SPIFFS surprises.
+#
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+# The concrete partition table path is injected by scripts/run_unit_tests.sh.
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_HTTPD_WS_SUPPORT=y
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=4096
+
+# Unit tests do not need PSRAM. Keeping all allocations in internal RAM avoids
+# PSRAM heap-poisoning noise that can mask real component regressions.
+# CONFIG_SPIRAM is not set
+
+# Disable task WDT for interactive Unity menu on unit-test-app.
+# Otherwise waiting for serial input can starve IDLE0 and spam watchdog logs.
+# CONFIG_ESP_TASK_WDT_EN is not set
